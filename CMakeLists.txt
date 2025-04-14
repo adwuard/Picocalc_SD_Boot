@@ -23,7 +23,7 @@ add_subdirectory(pico-vfs)
 
 
 function(build_for_board board_name)
-  set(PICO_BOARD ${board_name})
+  #set(PICO_BOARD ${board_name})
 
   
   add_executable(picocalc_sd_boot_${board_name}
@@ -85,9 +85,11 @@ build_for_board(pico2_w)
 # FLASH origin = 0x10000000 + 256k, which aligns with the SD_BOOT_FLASH_OFFSET
 # defined in main.c (256 * 1024). This ensures the bootloader (first 256KB)
 # is preserved when flashing the application.
-if(${PICO_PLATFORM} STREQUAL "rp2040")
-  pico_set_linker_script(${CMAKE_PROJECT_NAME} ${CMAKE_SOURCE_DIR}/memmap_default_rp2040.ld)
-elseif(${PICO_PLATFORM} MATCHES "rp2350")
-  pico_set_linker_script(${CMAKE_PROJECT_NAME} ${CMAKE_SOURCE_DIR}/memmap_default_rp2350.ld)
-endif()
-
+function(enable_sdcard_app target)
+  #pico_set_linker_script(${target} ${CMAKE_SOURCE_DIR}/memmap_sdcard_app.ld)
+  if(${PICO_PLATFORM} STREQUAL "rp2040")
+    pico_set_linker_script(${CMAKE_PROJECT_NAME} ${CMAKE_SOURCE_DIR}/memmap_default_rp2040.ld)
+  elseif(${PICO_PLATFORM} MATCHES "rp2350")
+    pico_set_linker_script(${CMAKE_PROJECT_NAME} ${CMAKE_SOURCE_DIR}/memmap_default_rp2350.ld)
+  endif()
+endfunction()
