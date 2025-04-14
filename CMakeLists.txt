@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.13...3.27)
 
-set(PICO_PLATFORM rp2350)
-set(PICO_BOARD pico2_w)
+set(PICO_PLATFORM rp2040)
+set(PICO_BOARD pico)
 
 include(pico_sdk_import.cmake)
 
@@ -23,8 +23,6 @@ add_subdirectory(pico-vfs)
 
 
 function(build_for_board board_name)
-  #set(PICO_BOARD ${board_name})
-
   
   add_executable(picocalc_sd_boot_${board_name}
     main.c
@@ -75,10 +73,10 @@ endfunction()
 
 
 # Build for Pico
-#build_for_board(pico)
+build_for_board(pico)
 
 # Build for Pico (Not supported yet)
-build_for_board(pico2_w)
+#build_for_board(pico2_w)
 
 # This function sets the custom linker script for SD card applications
 # The memmap_sdcard_app.ld script configures the application to start at
