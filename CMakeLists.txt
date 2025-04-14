@@ -21,7 +21,7 @@ function(build_for_board board_name)
   endif()
 
   include(pico_sdk_import.cmake)
-  
+
   add_subdirectory(i2ckbd)
   add_subdirectory(lcdspi)
   add_subdirectory(pico-vfs)
@@ -79,7 +79,7 @@ endfunction()
 # Build for Pico
 #build_for_board(pico)
 
-# Build for Pico (Not supported yet)
+# Build for Pico
 build_for_board(pico2_w)
 
 # This function sets the custom linker script for SD card applications
