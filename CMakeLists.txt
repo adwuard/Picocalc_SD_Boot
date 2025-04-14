@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.13...3.27)
 
+set(PICO_PLATFORM rp2350)
+set(PICO_BOARD pico2_w)
+
 include(pico_sdk_import.cmake)
 
 project(picocalc_sd_boot C CXX ASM)
@@ -72,20 +75,19 @@ endfunction()
 
 
 # Build for Pico
-build_for_board(pico)
+#build_for_board(pico)
 
 # Build for Pico (Not supported yet)
-# build_for_board(pico2)
-
-
-
+build_for_board(pico2_w)
 
 # This function sets the custom linker script for SD card applications
 # The memmap_sdcard_app.ld script configures the application to start at
 # FLASH origin = 0x10000000 + 256k, which aligns with the SD_BOOT_FLASH_OFFSET
 # defined in main.c (256 * 1024). This ensures the bootloader (first 256KB)
 # is preserved when flashing the application.
-function(enable_sdcard_app target)
-  pico_set_linker_script(${target} ${CMAKE_SOURCE_DIR}/memmap_sdcard_app.ld)
-endfunction()
+if(${PICO_PLATFORM} STREQUAL "rp2040")
+  pico_set_linker_script(${CMAKE_PROJECT_NAME} ${CMAKE_SOURCE_DIR}/memmap_default_rp2040.ld)
+elseif(${PICO_PLATFORM} MATCHES "rp2350")
+  pico_set_linker_script(${CMAKE_PROJECT_NAME} ${CMAKE_SOURCE_DIR}/memmap_default_rp2350.ld)
+endif()
 

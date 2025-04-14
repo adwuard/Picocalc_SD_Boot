@@ -33,6 +33,13 @@
 
 const uint LEDPIN = 25;
 
+// Vector table offset
+#if PICO_RP2040
+#define VTOR_OFFSET M0PLUS_VTOR_OFFSET
+#elif PICO_RP2350
+#define VTOR_OFFSET M33_VTOR_OFFSET
+#endif
+
 bool sd_card_inserted(void)
 {
     // Active low detection - returns true when pin is low
@@ -163,7 +170,7 @@ void __not_in_flash_func(launch_application_from)(uint32_t *app_location)
 {
     // https://vanhunteradams.com/Pico/Bootloader/Bootloader.html
     uint32_t *new_vector_table = app_location;
-    volatile uint32_t *vtor = (uint32_t *)(PPB_BASE + M0PLUS_VTOR_OFFSET);
+    volatile uint32_t *vtor = (uint32_t *)(PPB_BASE + VTOR_OFFSET);
     *vtor = (uint32_t)new_vector_table;
     asm volatile(
         "msr msp, %0\n"
