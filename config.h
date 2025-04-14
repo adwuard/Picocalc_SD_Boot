@@ -37,7 +37,11 @@
 // This offset is used to ensure that the bootloader does not get overwritten
 // when loading a new application from the SD card
 #if !defined(SD_BOOT_FLASH_OFFSET)
-#define SD_BOOT_FLASH_OFFSET         (256 * 1024)
+    #if PICO_RP2040
+        #define SD_BOOT_FLASH_OFFSET         (256 * 1024)
+    #elif PICO_RP2350
+        #define SD_BOOT_FLASH_OFFSET         (512 * 1024)
+    #endif
 #endif
 
 // Maximum size of the application that can be loaded
