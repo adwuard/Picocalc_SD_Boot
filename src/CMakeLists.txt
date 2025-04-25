@@ -24,7 +24,7 @@ function(build_for_board board_name)
 
   add_subdirectory(i2ckbd)
   add_subdirectory(lcdspi)
-  add_subdirectory(pico-vfs)
+  add_subdirectory(lib/pico-vfs)
 
   pico_sdk_init()
 
