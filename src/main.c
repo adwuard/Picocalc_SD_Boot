@@ -306,7 +306,7 @@ int main()
     lcd_init();
     lcd_clear();
     text_directory_ui_init();
-    
+
     // Check for SD card presence
     DEBUG_PRINT("Checking for SD card...\n");
     if (!sd_card_inserted())
@@ -368,10 +368,9 @@ int main()
         
         bool esc_exit = false;
         while (!esc_exit) {
-            tud_task();
-            int key = keypad_get_key();
-            if (key == KEY_ESC) esc_exit = true;
-            sleep_ms(1);
+            tud_task(); // tinyusb device task
+            // int key = keypad_get_key();
+            // if (key == KEY_ESC) esc_exit = true;
         }
         
         // Properly stop USB MSC mode

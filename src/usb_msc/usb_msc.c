@@ -33,7 +33,11 @@ static uint32_t msc_last_write_lba = (uint32_t)-1;
 void usb_msc_init(void)
 {
     // Initialize TinyUSB device stack
-    tusb_init();
+    tusb_rhport_init_t dev_init = {
+        .role = TUSB_ROLE_DEVICE,
+        .speed = TUSB_SPEED_AUTO
+    };
+    tusb_init(BOARD_TUD_RHPORT, &dev_init);
 
     // Create SD block device for MSC
     msc_blockdev = blockdevice_sd_create(
@@ -84,9 +88,9 @@ void tud_msc_inquiry_cb(uint8_t lun, uint8_t p_vendor_id[8], uint8_t p_product_i
     static const char product[16] = "SD_MSC_BOOT";
     static const char revision[4] = "1.0 ";
 
-    memcpy(p_vendor_id,  vendor, 8);
-    memcpy(p_product_id, product, 16);
-    memcpy(p_product_rev, revision, 4);
+    memcpy(p_vendor_id,  vendor, strlen(vendor));
+    memcpy(p_product_id, product, strlen(product));
+    memcpy(p_product_rev, revision, strlen(revision));
 }
 
 // Invoked when received SCSI_CMD_READ_CAPACITY_10 and SCSI_CMD_READ_FORMAT_CAPACITY to determine the disk size
