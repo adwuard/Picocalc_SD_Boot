@@ -29,12 +29,18 @@ cd Picocalc_SD_Boot
 git submodule update --init --recursive
 ```
 
-Build the bootloader.
 
+Build for Pico
 ```bash
-cd ./src
-mkdir build; cd build
-cmake ..
+mkdir build_pico && cd build_pico
+cmake -DPICO_BOARD=pico -DPICO_PLATFORM=rp2040 ..
+make
+```
+
+Build for Pico2 W
+```bash
+mkdir build_pico2_w && cd build_pico2_w
+cmake -DPICO_BOARD=pico2_w -DPICO_PLATFORM=rp2350 ..
 make
 ```
 
