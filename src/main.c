@@ -24,13 +24,13 @@
 #include <errno.h>
 #include <hardware/watchdog.h>
 #include "config.h"
+#include "tusb.h" // Include TinyUSB header for tud_task
 
 #include "blockdevice/sd.h"
 #include "filesystem/fat.h"
 #include "filesystem/vfs.h"
 #include "text_directory_ui.h"
 #include "key_event.h"
-#include "tusb.h"
 
 const uint LEDPIN = 25;
 
@@ -49,17 +49,20 @@ bool sd_card_inserted(void)
     return !gpio_get(SD_DET_PIN);
 }
 
+static blockdevice_t *sd = NULL;
+static filesystem_t *fat = NULL;
+
 bool fs_init(void)
 {
     DEBUG_PRINT("fs init SD\n");
-    blockdevice_t *sd = blockdevice_sd_create(spi0,
-                                              SD_MOSI_PIN,
-                                              SD_MISO_PIN,
-                                              SD_SCLK_PIN,
-                                              SD_CS_PIN,
-                                              125000000 / 2 / 4, // 15.6MHz
-                                              true);
-    filesystem_t *fat = filesystem_fat_create();
+    sd = blockdevice_sd_create(spi0,
+                               SD_MOSI_PIN,
+                               SD_MISO_PIN,
+                               SD_SCLK_PIN,
+                               SD_CS_PIN,
+                               125000000 / 2 / 4, // 15.6MHz
+                               true);
+    fat = filesystem_fat_create();
     int err = fs_mount("/sd", fat, sd);
     if (err == -1)
     {
@@ -79,6 +82,22 @@ bool fs_init(void)
     }
     return true;
 }
+
+bool fs_deinit(void)
+{
+    if (sd)
+    {
+        blockdevice_sd_free(sd);
+        sd = NULL;
+    }
+    if (fat)
+    {
+        filesystem_fat_free(fat);
+        fat = NULL;
+    }
+    return true;
+}
+
 
 static bool __not_in_flash_func(is_same_existing_program)(FILE *fp)
 {
@@ -272,7 +291,6 @@ void final_selection_callback(const char *path)
 
 int main()
 {
-    char buf[64];
     stdio_init_all();
 
     uart_init(uart0, 115200);
@@ -335,6 +353,8 @@ int main()
         // Run the UI - returns when user selects USB MSC mode
         text_directory_ui_run();
         
+        fs_deinit();
+
         // If we get here, the user has selected USB MSC mode
         DEBUG_PRINT("Entering USB MSC mode\n");
         
@@ -343,8 +363,11 @@ int main()
         
         // USB MSC has already been initialized in text_directory_ui.c
         // Enter USB task loop until disconnected or ESC pressed
+        
+        usb_msc_init();
+        
         bool esc_exit = false;
-        while (usb_msc_is_mounted() && !esc_exit) {
+        while (!esc_exit) {
             tud_task();
             int key = keypad_get_key();
             if (key == KEY_ESC) esc_exit = true;

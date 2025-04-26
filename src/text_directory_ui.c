@@ -33,6 +33,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include "usb_msc/usb_msc.h"
+#include "filesystem/vfs.h"
 
 // External functions for SD card handling
 extern bool sd_card_inserted(void);
@@ -391,12 +392,11 @@ static void process_key_event(int key)
             // Check if the USB Mass Storage entry is selected (always the last entry)
             if (selected_index == entry_count - 1 && strcmp(entries[selected_index].name, "USB Mass Storage") == 0)
             {
-                text_directory_ui_set_status("Entering USB MSC mode...");
-                // Unmount the filesystem
-                extern int fs_unmount(const char *mount_point);
-                fs_unmount("/sd");
+                // text_directory_ui_set_status("Entering USB MSC mode...");
+                // Unmount the filesystem using VFS
+                // fs_unmount("/sd");
                 // Initialize USB MSC
-                usb_msc_init();
+                // usb_msc_init();
                 // Set flag to exit UI loop
                 exit_to_usb_msc = true;
                 return;
@@ -464,6 +464,7 @@ void text_directory_ui_set_status(const char *msg)
 }
 
 // Public API: Show an overlay popup indicating that USB Mass Storage mode is active
+// This function is called by tud_mount_cb() in usb_msc.c when a USB host connects
 void text_directory_ui_show_msc_popup(void)
 {
     // Draw a semi-transparent overlay
@@ -475,6 +476,7 @@ void text_directory_ui_show_msc_popup(void)
 }
 
 // Public API: Hide the USB Mass Storage mode overlay popup
+// This function is called by tud_umount_cb() in usb_msc.c when a USB host disconnects
 void text_directory_ui_hide_msc_popup(void)
 {
     // Clear the overlay by refreshing the entire UI
