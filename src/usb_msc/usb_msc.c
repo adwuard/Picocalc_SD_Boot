@@ -12,8 +12,8 @@
 #include <string.h>
 #include <hardware/gpio.h>
 
-// Block device for MSC
-static blockdevice_t *msc_blockdev;
+// Block devices and filesystems
+static blockdevice_t *msc_blockdev;      // SD card block device
 static uint32_t msc_block_count;
 static uint16_t msc_block_size;
 
@@ -50,8 +50,9 @@ void usb_msc_init(void)
     }
 
     // Retrieve capacity information from blockdevice
-    msc_block_size  = msc_blockdev->erase_size;
+    msc_block_size = msc_blockdev->read_size;
     msc_block_count = msc_blockdev->size(msc_blockdev) / msc_block_size;
+    return;
 }
 
 //--------------------------------------------------------------------
@@ -105,8 +106,9 @@ void tud_msc_capacity_cb(uint8_t lun, uint32_t* block_count, uint16_t* block_siz
         return; // No block device available
     }
 
-    *block_count = msc_block_count;
-    *block_size  = msc_block_size;
+    // Use read_size (typically 512 bytes for SD) as the block size
+    *block_size = msc_blockdev->read_size;
+    *block_count = msc_blockdev->size(msc_blockdev) / msc_blockdev->read_size;
 }
 
 // Invoked when received Start Stop Unit command
@@ -132,23 +134,22 @@ bool tud_msc_start_stop_cb(uint8_t lun, uint8_t power_condition, bool start, boo
 // SCSI Read10: transfer data from SD to host
 int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void* buffer, uint32_t bufsize)
 {
-    // Check if SD card is still inserted
-    // if (!sd_card_inserted()) {
-        // tud_msc_set_sense(lun, SCSI_SENSE_NOT_READY, 0x3A, 0x00);
-        // return -1;
-    // }
+    (void) lun; // Unused parameter
 
-    // On new block, load entire sector
-    if (offset == 0) {
-        if (msc_blockdev->read(msc_blockdev, msc_read_buffer, lba, 1) != 0) {
-            return false;
-        }
-        msc_last_read_lba = lba;
+    // Ensure block device is initialized
+    if (msc_blockdev == NULL) {
+        return -1;
     }
 
-    // Copy requested portion
-    memcpy(buffer, msc_read_buffer + offset, bufsize);
-    return true;
+    // Calculate the absolute byte address to read from
+    uint32_t byte_address = (lba * msc_block_size) + offset;
+
+    // Read data from the block device
+    if (msc_blockdev->read(msc_blockdev, buffer, byte_address, bufsize) != 0) {
+        return -1; // Read failed
+    }
+
+    return (int32_t)bufsize; // Return the number of bytes read
 }
 
 bool tud_msc_is_writable_cb(uint8_t lun) {
@@ -166,27 +167,22 @@ bool tud_msc_is_writable_cb(uint8_t lun) {
 // SCSI Write10: receive data from host and program to SD
 int32_t tud_msc_write10_cb(uint8_t lun, uint32_t lba, uint32_t offset, uint8_t* buffer, uint32_t bufsize)
 {
-    // Check if SD card is still inserted
-    // if (!sd_card_inserted()) {
-        // tud_msc_set_sense(lun, SCSI_SENSE_NOT_READY, 0x3A, 0x00);
-        // return -1;
-    // }
+    (void) lun; // Unused parameter
 
-    // On start of block, update LBA
-    if (offset == 0) {
-        msc_last_write_lba = lba;
+    // Ensure block device is initialized
+    if (msc_blockdev == NULL) {
+        return -1;
     }
 
-    // Copy incoming data to buffer
-    memcpy(msc_write_buffer + offset, buffer, bufsize);
+    // Calculate the absolute byte address to write to
+    uint32_t byte_address = (lba * msc_block_size) + offset;
 
-    // When entire block received, program to SD
-    if (offset + bufsize >= msc_block_size) {
-        if (msc_blockdev->program(msc_blockdev, msc_write_buffer, msc_last_write_lba, 1) != 0) {
-            return false;
-        }
+    // Write data to the block device
+    if (msc_blockdev->program(msc_blockdev, buffer, byte_address, bufsize) != 0) {
+        return -1; // Write failed
     }
-    return true;
+
+    return (int32_t)bufsize; // Return the number of bytes written
 }
 
 // Flush any pending writes (not needed for SD)
@@ -196,7 +192,11 @@ void tud_msc_write10_flush_cb(uint8_t lun)
 }
 
 bool tud_msc_test_unit_ready_cb(uint8_t lun) {
-    // return sd_card_inserted();
+    bool inserted = sd_card_inserted();
+    if (!inserted) {
+        tud_msc_set_sense(lun, SCSI_SENSE_NOT_READY, 0x3A, 0x00);
+        return false;
+    }
     return true;
 }
 
@@ -230,6 +230,6 @@ void usb_msc_stop(void)
     if (msc_blockdev) {
         blockdevice_sd_free(msc_blockdev);
         msc_blockdev = NULL;
-    }
+    } 
     tud_disconnect();
 }
