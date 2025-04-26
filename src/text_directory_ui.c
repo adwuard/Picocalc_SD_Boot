@@ -471,7 +471,7 @@ void text_directory_ui_show_msc_popup(void)
     draw_filled_rect(UI_X + 20, UI_Y + 100, UI_WIDTH - 40, 80, BLACK);
     
     // Draw the message
-    draw_text(UI_X + 30, UI_Y + 120, "MSC Active", WHITE, BLACK);
+    draw_text(UI_X + 30, UI_Y + 120, "USB Device MSC Drive Mode", WHITE, BLACK);
     draw_text(UI_X + 30, UI_Y + 140, "Press ESC to exit", WHITE, BLACK);
 }
 

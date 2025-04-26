@@ -369,6 +369,8 @@ int main()
         bool esc_exit = false;
         while (!esc_exit) {
             tud_task(); // tinyusb device task
+        
+            // TODO: @adwuard running in USB MSC mode, check for ESC key press, check in different thread to reduce usb halting!
             // int key = keypad_get_key();
             // if (key == KEY_ESC) esc_exit = true;
         }

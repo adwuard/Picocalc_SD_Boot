@@ -99,6 +99,12 @@ void tud_msc_inquiry_cb(uint8_t lun, uint8_t p_vendor_id[8], uint8_t p_product_i
 void tud_msc_capacity_cb(uint8_t lun, uint32_t* block_count, uint16_t* block_size)
 {
     (void) lun;
+    if (msc_blockdev == NULL) {
+        *block_count = 0;
+        *block_size  = 0;
+        return; // No block device available
+    }
+
     *block_count = msc_block_count;
     *block_size  = msc_block_size;
 }
@@ -127,10 +133,10 @@ bool tud_msc_start_stop_cb(uint8_t lun, uint8_t power_condition, bool start, boo
 int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void* buffer, uint32_t bufsize)
 {
     // Check if SD card is still inserted
-    if (!sd_card_inserted()) {
-        tud_msc_set_sense(lun, SCSI_SENSE_NOT_READY, 0x3A, 0x00);
-        return -1;
-    }
+    // if (!sd_card_inserted()) {
+        // tud_msc_set_sense(lun, SCSI_SENSE_NOT_READY, 0x3A, 0x00);
+        // return -1;
+    // }
 
     // On new block, load entire sector
     if (offset == 0) {
@@ -161,10 +167,10 @@ bool tud_msc_is_writable_cb(uint8_t lun) {
 int32_t tud_msc_write10_cb(uint8_t lun, uint32_t lba, uint32_t offset, uint8_t* buffer, uint32_t bufsize)
 {
     // Check if SD card is still inserted
-    if (!sd_card_inserted()) {
-        tud_msc_set_sense(lun, SCSI_SENSE_NOT_READY, 0x3A, 0x00);
-        return -1;
-    }
+    // if (!sd_card_inserted()) {
+        // tud_msc_set_sense(lun, SCSI_SENSE_NOT_READY, 0x3A, 0x00);
+        // return -1;
+    // }
 
     // On start of block, update LBA
     if (offset == 0) {
