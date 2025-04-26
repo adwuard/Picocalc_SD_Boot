@@ -30,6 +30,7 @@
 #include "filesystem/vfs.h"
 #include "text_directory_ui.h"
 #include "key_event.h"
+#include "tusb.h"
 
 const uint LEDPIN = 25;
 
@@ -328,5 +329,46 @@ int main()
     
     text_directory_ui_init();
     text_directory_ui_set_final_callback(final_selection_callback);
-    text_directory_ui_run();
+    
+    // Main UI loop - will return if user selects USB MSC mode
+    while (1) {
+        // Run the UI - returns when user selects USB MSC mode
+        text_directory_ui_run();
+        
+        // If we get here, the user has selected USB MSC mode
+        DEBUG_PRINT("Entering USB MSC mode\n");
+        
+        // Show the MSC mode popup overlay
+        text_directory_ui_show_msc_popup();
+        
+        // USB MSC has already been initialized in text_directory_ui.c
+        // Enter USB task loop until disconnected or ESC pressed
+        bool esc_exit = false;
+        while (usb_msc_is_mounted() && !esc_exit) {
+            tud_task();
+            int key = keypad_get_key();
+            if (key == KEY_ESC) esc_exit = true;
+            sleep_ms(1);
+        }
+        
+        // Properly stop USB MSC mode
+        usb_msc_stop();
+        
+        // Hide the MSC mode popup overlay
+        text_directory_ui_hide_msc_popup();
+        
+        // When USB is disconnected or ESC pressed, reinitialize the filesystem
+        DEBUG_PRINT("USB MSC mode exited, remounting filesystem\n");
+        text_directory_ui_set_status("USB MSC mode exited. Remounting...");
+        
+        if (!fs_init()) {
+            text_directory_ui_set_status("Failed to remount filesystem!");
+            sleep_ms(2000);
+            watchdog_reboot(0, 0, 0);
+        }
+        
+        // Return to the UI
+        text_directory_ui_set_status("Filesystem remounted. Returning to UI.");
+        sleep_ms(500);
+    }
 }

@@ -32,6 +32,7 @@
 #include "debug.h"
 #include <sys/stat.h>
 #include <dirent.h>
+#include "usb_msc/usb_msc.h"
 
 // External functions for SD card handling
 extern bool sd_card_inserted(void);
@@ -79,6 +80,7 @@ static int selected_index = 0;                           // Currently selected e
 static char status_message[256] = "";                    // Status message
 static uint32_t status_timestamp = 0;                    // Timestamp for status message
 static final_selection_callback_t final_callback = NULL; // Callback for file selection
+static bool exit_to_usb_msc = false;                     // Flag to exit UI loop for USB MSC mode
 
 // Forward declarations
 static void ui_refresh(void);
@@ -162,7 +164,7 @@ static void load_directory(const char *path)
     }
     entry_count = 0;
     struct dirent *ent;
-    while ((ent = readdir(dir)) != NULL && entry_count < MAX_ENTRIES)
+    while ((ent = readdir(dir)) != NULL && entry_count < MAX_ENTRIES - 1) // Reserve one slot for USB MSC entry
     {
         if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
             continue;
@@ -206,6 +208,14 @@ static void load_directory(const char *path)
         entry_count++;
     }
     closedir(dir);
+    
+    // Add USB Mass Storage entry at the end
+    strncpy(entries[entry_count].name, "USB Mass Storage", sizeof(entries[entry_count].name) - 1);
+    entries[entry_count].name[sizeof(entries[entry_count].name) - 1] = '\0';
+    entries[entry_count].is_dir = 0;
+    entries[entry_count].file_size = 0;
+    entry_count++;
+    
     selected_index = 0;
 }
 
@@ -378,6 +388,20 @@ static void process_key_event(int key)
     case KEY_ENTER:
         if (entry_count > 0)
         {
+            // Check if the USB Mass Storage entry is selected (always the last entry)
+            if (selected_index == entry_count - 1 && strcmp(entries[selected_index].name, "USB Mass Storage") == 0)
+            {
+                text_directory_ui_set_status("Entering USB MSC mode...");
+                // Unmount the filesystem
+                extern int fs_unmount(const char *mount_point);
+                fs_unmount("/sd");
+                // Initialize USB MSC
+                usb_msc_init();
+                // Set flag to exit UI loop
+                exit_to_usb_msc = true;
+                return;
+            }
+            
             char new_path[512];
             if (entries[selected_index].is_dir)
             {
@@ -439,13 +463,33 @@ void text_directory_ui_set_status(const char *msg)
     ui_draw_status_bar();
 }
 
+// Public API: Show an overlay popup indicating that USB Mass Storage mode is active
+void text_directory_ui_show_msc_popup(void)
+{
+    // Draw a semi-transparent overlay
+    draw_filled_rect(UI_X + 20, UI_Y + 100, UI_WIDTH - 40, 80, BLACK);
+    
+    // Draw the message
+    draw_text(UI_X + 30, UI_Y + 120, "MSC Active", WHITE, BLACK);
+    draw_text(UI_X + 30, UI_Y + 140, "Press ESC to exit", WHITE, BLACK);
+}
+
+// Public API: Hide the USB Mass Storage mode overlay popup
+void text_directory_ui_hide_msc_popup(void)
+{
+    // Clear the overlay by refreshing the entire UI
+    ui_refresh();
+}
+
 // Public API: Main event loop for the UI
 void text_directory_ui_run(void)
 {
     uint32_t last_scroll_update = 0;
     const uint32_t SCROLL_UPDATE_MS = 100; // Update scrolling text every 100ms
     
-    while (true)
+    exit_to_usb_msc = false;
+    
+    while (!exit_to_usb_msc)
     {
         int key = keypad_get_key();
         if (key != 0)
@@ -498,4 +542,11 @@ void text_directory_ui_run(void)
 
         sleep_ms(20); // Shorter sleep to make scrolling smoother
     }
+}
+
+// Public API: Pause the UI and enter USB MSC mode. This function will return when USB is disconnected
+// or when the device is reset.
+void text_directory_ui_pause(void)
+{
+    // Not implemented yet
 }

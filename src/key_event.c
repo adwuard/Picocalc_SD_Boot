@@ -60,7 +60,7 @@ int keypad_get_key(void)
             break;
 
         case 0xB1: // ESC
-            act_key = 0;
+            act_key = KEY_ESC;
             break;
         case 0x09: // TAB
             act_key = 0;

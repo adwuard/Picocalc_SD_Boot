@@ -13,6 +13,7 @@ typedef enum {
     KEY_ARROW_DOWN = 0xB6,
     KEY_BACKSPACE = 0x08,
     KEY_ENTER = 0x0A,
+    KEY_ESC = 0x1B,    /* Used to exit USB MSC mode */
 } lv_key_t;
 
 void keypad_init(void);

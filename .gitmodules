@@ -1,3 +1,6 @@
 [submodule "src/lib/pico-vfs"]
 	path = src/lib/pico-vfs
 	url = https://github.com/oyama/pico-vfs.git
+[submodule "src/lib/tinyusb"]
+	path = src/lib/tinyusb
+	url = https://github.com/hathach/tinyusb.git

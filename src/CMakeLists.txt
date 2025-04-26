@@ -1,85 +1,92 @@
-cmake_minimum_required(VERSION 3.13...3.27)
+cmake_minimum_required(VERSION 3.12)
 
 include(pico_sdk_import.cmake)
 
 project(picocalc_sd_boot C CXX ASM)
+
 set(CMAKE_INSTALL_PREFIX ${CMAKE_SOURCE_DIR} CACHE PATH "Install prefix set to project root" FORCE)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
+pico_sdk_init()
+
 include_directories(
   ${CMAKE_CURRENT_LIST_DIR}
 )
 
-function(build_for_board board_name)
+add_subdirectory(i2ckbd)
+add_subdirectory(lcdspi)
+add_subdirectory(lib/pico-vfs)
 
-  if(board_name STREQUAL "pico2_w")
-    set(PICO_BOARD pico2_w)
-  else()
-    set(PICO_BOARD pico)
-  endif()
+# add_subdirectory(lib/tinyusb/src)
+add_definitions(-DCFG_TUSB_CONFIG_FILE="tusb_config.h")
 
 
-  add_subdirectory(i2ckbd)
-  add_subdirectory(lcdspi)
-  add_subdirectory(lib/pico-vfs)
 
-  pico_sdk_init()
+add_executable(picocalc_sd_boot_${board_name}
+  main.c
+  key_event.c
+  text_directory_ui.c
+)
 
-  add_executable(picocalc_sd_boot_${board_name}
-    main.c
-    key_event.c
-    text_directory_ui.c
+target_sources(picocalc_sd_boot_${board_name} PRIVATE
+  usb_msc/usb_msc.c
+  usb_msc/usb_descriptors.c
+)
+
+# ${CMAKE_CURRENT_LIST_DIR}/lib/tinyusb/src
+target_include_directories(picocalc_sd_boot_${board_name} PRIVATE
+${CMAKE_CURRENT_LIST_DIR}/usb_msc
+)
+
+target_link_libraries(picocalc_sd_boot_${board_name} PUBLIC
+  pico_stdlib
+  hardware_sync
+  hardware_flash
+  hardware_irq
+  hardware_adc
+  hardware_pwm
+  hardware_i2c
+  hardware_spi
+  hardware_dma
+  hardware_exception
+  hardware_pio
+  pico_multicore
+  i2ckbd
+  lcdspi
+  blockdevice_sd
+  filesystem_fat
+  filesystem_vfs
+  pico_unique_id
+  tinyusb_device
+  tinyusb_board
   )
+  # pico_usb_device
 
-  target_link_libraries(picocalc_sd_boot_${board_name}
-    pico_stdlib
-    hardware_sync
-    hardware_flash
-    hardware_irq
-    hardware_adc
-    hardware_pwm
-    hardware_i2c
-    hardware_spi
-    hardware_dma
-    hardware_exception
-    hardware_pio
-    pico_multicore
-    i2ckbd
-    lcdspi
-    blockdevice_sd
-    filesystem_fat
-    filesystem_vfs
-  )
-
-  pico_enable_stdio_usb(picocalc_sd_boot_${board_name} 0)
-  pico_enable_stdio_uart(picocalc_sd_boot_${board_name} 1)
-
-  pico_add_extra_outputs(picocalc_sd_boot_${board_name})
-
-  target_link_options(picocalc_sd_boot_${board_name} PRIVATE -Wl,--print-memory-usage)
-
-  # Define the output directory relative to the project root directory
-  set(output_dir prebuild_output/${board_name})
-
-  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/picocalc_sd_boot_${board_name}.elf
-    DESTINATION ${output_dir}
-  )
-  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/picocalc_sd_boot_${board_name}.uf2
-    DESTINATION ${output_dir}
-  )
-  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/picocalc_sd_boot_${board_name}.bin
-    DESTINATION ${output_dir}
-  )
-endfunction()
+  # target_link_libraries(dev_hid_composite PUBLIC pico_stdlib pico_unique_id tinyusb_device tinyusb_board)
 
 
-# Build for Pico
-#build_for_board(pico)
+# pico_enable_stdio_usb(picocalc_sd_boot_${board_name} 1)
+pico_enable_stdio_uart(picocalc_sd_boot_${board_name} 0)
 
-# Build for Pico
-build_for_board(pico2_w)
+pico_add_extra_outputs(picocalc_sd_boot_${board_name})
+
+target_link_options(picocalc_sd_boot_${board_name} PRIVATE -Wl,--print-memory-usage)
+
+# Define the output directory relative to the project root directory
+set(output_dir prebuild_output/${board_name})
+
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/picocalc_sd_boot_${board_name}.elf
+  DESTINATION ${output_dir}
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/picocalc_sd_boot_${board_name}.uf2
+  DESTINATION ${output_dir}
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/picocalc_sd_boot_${board_name}.bin
+  DESTINATION ${output_dir}
+)
+
 
 # This function sets the custom linker script for SD card applications
 # The memmap_sdcard_app.ld script configures the application to start at
