@@ -1,6 +1,15 @@
-/*
- * text_directory_ui.h
- * 
+/**
+ * @file text_directory_ui.h
+ * @brief Text-based UI for navigating directories and files on an SD card
+ *
+ * This module provides a text-based UI for navigating directories and files on an SD card.
+ * It uses lcdspi APIs for rendering, key_event APIs for input handling, and pico-vfs/standard 
+ * POSIX APIs for filesystem operations.
+ *
+ * @author Hsuan Han Lai
+ * @email hsuan.han.lai@gmail.com
+ * @website https://hsuanhanlai.com
+ * @year 2025
  */
 
 #ifndef TEXT_DIRECTORY_UI_H
@@ -9,31 +18,62 @@
 #include <stdbool.h>
 #include "usb_msc/usb_msc.h"
 
-// Callback type: invoked when the user makes a final selection. The selected path is passed as an argument.
-typedef void (*final_selection_callback_t)(const char *selected_path);
-
-// Initialize the text directory UI. This sets up the SD card filesystem and the display UI.
-// Returns true if initialization succeeded, false otherwise.
+/**
+ * @brief Initialize the text directory UI
+ *
+ * Sets up the SD card filesystem and the display UI.
+ *
+ * @return true if initialization succeeded, false otherwise
+ */
 bool text_directory_ui_init(void);
 
-// Run the main event loop for the directory navigation UI. This function polls for key events,
-// updates the selection cursor, and processes directory changes.
+/**
+ * @brief Run the main event loop for the directory navigation UI
+ *
+ * This function polls for key events, updates the selection cursor,
+ * and processes directory changes. It will exit when the ESC key is pressed.
+ */
 void text_directory_ui_run(void);
 
-// Register a callback that will be called when the final selection is made.
-void text_directory_ui_set_final_callback(final_selection_callback_t callback);
+/**
+ * @brief Register a callback for file selection
+ *
+ * The callback will be invoked when the user makes a final selection.
+ *
+ * @param callback Function pointer that accepts a const char* parameter
+ *                 containing the selected file path
+ */
+void UIManager_setFinalCallback(void (*callback)(const char *selected_path));
 
-// Public API: Set a status or error message to be displayed in the status bar (auto-clears after 3 seconds)
+/**
+ * @brief Set a status or error message
+ *
+ * Displays a message in the status bar. The message will automatically
+ * clear after 3 seconds.
+ *
+ * @param msg The message to display
+ */
 void text_directory_ui_set_status(const char *msg);
 
-// Pause the UI and enter USB MSC mode. This function will return when USB is disconnected
-// or when the device is reset.
+/**
+ * @brief Pause the UI and enter USB MSC mode
+ *
+ * This function will return when USB is disconnected or when the device is reset.
+ */
 void text_directory_ui_pause(void);
 
-// Show an overlay popup indicating that USB Mass Storage mode is active
+/**
+ * @brief Show USB Mass Storage mode active popup
+ *
+ * Displays an overlay popup indicating that USB Mass Storage mode is active.
+ */
 void text_directory_ui_show_msc_popup(void);
 
-// Hide the USB Mass Storage mode overlay popup
+/**
+ * @brief Hide USB Mass Storage mode popup
+ *
+ * Removes the USB Mass Storage mode overlay popup.
+ */
 void text_directory_ui_hide_msc_popup(void);
 
 #endif // TEXT_DIRECTORY_UI_H

@@ -15,22 +15,25 @@
 #include <stdio.h>
 #include <string.h>
 #include "pico/stdlib.h"
+#include "pico/multicore.h"
 #include "hardware/gpio.h"
 #include "hardware/clocks.h"
 #include "debug.h"
-#include "i2ckbd.h"
-#include "lcdspi.h"
 #include <hardware/flash.h>
 #include <errno.h>
 #include <hardware/watchdog.h>
 #include "config.h"
-#include "tusb.h" // Include TinyUSB header for tud_task
 
 #include "blockdevice/sd.h"
 #include "filesystem/fat.h"
 #include "filesystem/vfs.h"
-#include "text_directory_ui.h"
-#include "key_event.h"
+
+// Manager modules
+#include "managers/fs_manager.h"
+#include "managers/ui_manager.h"
+#include "managers/input_manager.h"
+#include "managers/msc_manager.h"
+#include "managers/event_bus.h"
 
 const uint LEDPIN = 25;
 
@@ -42,61 +45,6 @@ const uint LEDPIN = 25;
 #define VTOR_OFFSET M33_VTOR_OFFSET
 #define MAX_RAM 0x20080000
 #endif
-
-bool sd_card_inserted(void)
-{
-    // Active low detection - returns true when pin is low
-    return !gpio_get(SD_DET_PIN);
-}
-
-static blockdevice_t *sd = NULL;
-static filesystem_t *fat = NULL;
-
-bool fs_init(void)
-{
-    DEBUG_PRINT("fs init SD\n");
-    sd = blockdevice_sd_create(spi0,
-                               SD_MOSI_PIN,
-                               SD_MISO_PIN,
-                               SD_SCLK_PIN,
-                               SD_CS_PIN,
-                               125000000 / 2 / 4, // 15.6MHz
-                               true);
-    fat = filesystem_fat_create();
-    int err = fs_mount("/sd", fat, sd);
-    if (err == -1)
-    {
-        DEBUG_PRINT("format /sd\n");
-        err = fs_format(fat, sd);
-        if (err == -1)
-        {
-            DEBUG_PRINT("format err: %s\n", strerror(errno));
-            return false;
-        }
-        err = fs_mount("/sd", fat, sd);
-        if (err == -1)
-        {
-            DEBUG_PRINT("mount err: %s\n", strerror(errno));
-            return false;
-        }
-    }
-    return true;
-}
-
-bool fs_deinit(void)
-{
-    if (sd)
-    {
-        blockdevice_sd_free(sd);
-        sd = NULL;
-    }
-    if (fat)
-    {
-        filesystem_fat_free(fat);
-        fat = NULL;
-    }
-    return true;
-}
 
 
 static bool __not_in_flash_func(is_same_existing_program)(FILE *fp)
@@ -301,98 +249,100 @@ int main()
     gpio_init(SD_DET_PIN);
     gpio_set_dir(SD_DET_PIN, GPIO_IN);
     gpio_pull_up(SD_DET_PIN); // Enable pull-up resistor
+    event_bus_init();
 
+    
     keypad_init();
     lcd_init();
     lcd_clear();
     text_directory_ui_init();
 
-    // Check for SD card presence
-    DEBUG_PRINT("Checking for SD card...\n");
-    if (!sd_card_inserted())
-    {
-        DEBUG_PRINT("SD card not detected\n");
-        text_directory_ui_set_status("SD card not detected. \nPlease insert SD card.");
-        
-        // Poll until SD card is inserted
-        while (!sd_card_inserted())
-        {
-            sleep_ms(100);
-        }
-        
-        // Card detected, wait for it to stabilize
-        DEBUG_PRINT("SD card detected\n");
-        text_directory_ui_set_status("SD card detected. Mounting...");
-        sleep_ms(1500); // Wait for card to stabilize
-    }
-    else
-    {
-        // If SD card is detected at boot, wait for stabilization
-        DEBUG_PRINT("SD card stabilization delay on boot\n");
-        text_directory_ui_set_status("Stabilizing SD card...");
-        sleep_ms(1500); // Delay to allow the SD card to fully power up and stabilize
-    }
-    
-    // Initialize filesystem
-    if (!fs_init())
-    {
-        text_directory_ui_set_status("Failed to mount SD card!");
-        DEBUG_PRINT("Failed to mount SD card\n");
+    // Initialize the managers
+    if (!InputManager_init()) {
+        DEBUG_PRINT("Failed to initialize input manager\n");
         sleep_ms(2000);
         watchdog_reboot(0, 0, 0);
     }
-    
-    sleep_ms(500);
-    lcd_clear();
-    
-    text_directory_ui_init();
-    text_directory_ui_set_final_callback(final_selection_callback);
-    
-    // Main UI loop - will return if user selects USB MSC mode
-    while (1) {
-        // Run the UI - returns when user selects USB MSC mode
-        text_directory_ui_run();
-        
-        fs_deinit();
 
+    if (!UIManager_init()) {
+        DEBUG_PRINT("Failed to initialize UI manager\n");
+        sleep_ms(2000);
+        watchdog_reboot(0, 0, 0);
+    }
+
+    // Set up the UI callback for file selection
+    UIManager_setFinalCallback(final_selection_callback);
+
+    // Initialize the MSC manager
+    if (!MSCManager_init()) {
+        DEBUG_PRINT("Failed to initialize MSC manager\n");
+        UIManager_setStatus("Failed to initialize USB");
+        sleep_ms(2000);
+        watchdog_reboot(0, 0, 0);
+    }
+
+    // Launch core 1 to handle MSC operations
+    multicore_launch_core1(MSCManager_core1_entry);
+
+    // Check for SD card presence and initialize filesystem
+    if (!FSManager_isMounted()) {
+        DEBUG_PRINT("SD card not detected or not mounted\n");
+        UIManager_setStatus("SD card not detected. Please insert SD card.");
+        
+        // Wait for card to be inserted and mounted
+        while (!FSManager_isMounted()) {
+            // Check if the card was inserted and try to mount it
+            if (!FSManager_mount()) {
+                sleep_ms(100);
+            }
+        }
+    }
+    
+    // Main UI loop
+    while (1) {
+        // Show the directory UI
+        UIManager_showDirectory();
+        
         // If we get here, the user has selected USB MSC mode
         DEBUG_PRINT("Entering USB MSC mode\n");
         
         // Show the MSC mode popup overlay
-        text_directory_ui_show_msc_popup();
+        UIManager_showMscPopup();
         
-        // USB MSC has already been initialized in text_directory_ui.c
-        // Enter USB task loop until disconnected or ESC pressed
+        // Signal core 1 to start MSC mode
+        event_bus_post(EVENT_MSC_START);
         
-        usb_msc_init();
-        
-        bool esc_exit = false;
-        while (!esc_exit) {
-            tud_task(); // tinyusb device task
-        
-            // TODO: @adwuard running in USB MSC mode, check for ESC key press, check in different thread to reduce usb halting!
-            // int key = keypad_get_key();
-            // if (key == KEY_ESC) esc_exit = true;
+        // Wait for MSC exit event
+        bool msc_active = true;
+        while (msc_active) {
+            if (event_bus_available()) {
+                event_type_t event = event_bus_get();
+                
+                if (event == EVENT_MSC_EXIT || event == EVENT_ESC_PRESSED || event == EVENT_CARD_REMOVED) {
+                    msc_active = false;
+                    DEBUG_PRINT("MSC mode exit event received: %d\n", event);
+                }
+            }
+            
+            // Small delay to prevent tight polling
+            sleep_ms(10);
         }
         
-        // Properly stop USB MSC mode
-        usb_msc_stop();
-        
         // Hide the MSC mode popup overlay
-        text_directory_ui_hide_msc_popup();
+        UIManager_hideMscPopup();
         
         // When USB is disconnected or ESC pressed, reinitialize the filesystem
         DEBUG_PRINT("USB MSC mode exited, remounting filesystem\n");
-        text_directory_ui_set_status("USB MSC mode exited. Remounting...");
+        UIManager_setStatus("USB MSC mode exited. Remounting...");
         
-        if (!fs_init()) {
-            text_directory_ui_set_status("Failed to remount filesystem!");
+        if (!FSManager_mount()) {
+            UIManager_setStatus("Failed to remount filesystem!");
             sleep_ms(2000);
             watchdog_reboot(0, 0, 0);
         }
         
         // Return to the UI
-        text_directory_ui_set_status("Filesystem remounted. Returning to UI.");
+        UIManager_setStatus("Filesystem remounted. Returning to UI.");
         sleep_ms(500);
     }
 }

@@ -28,16 +28,27 @@ add_executable(picocalc_sd_boot_${board_name}
   main.c
   key_event.c
   text_directory_ui.c
-)
-
-target_sources(picocalc_sd_boot_${board_name} PRIVATE
   usb_msc/usb_msc.c
   usb_msc/usb_descriptors.c
+  managers/event_bus.c
+  managers/fs_manager.c
+  managers/input_manager.c
+  managers/msc_manager.c
+  managers/ui_manager.c
+  sd_card.c
 )
 
-# ${CMAKE_CURRENT_LIST_DIR}/lib/tinyusb/src
+# target_sources(picocalc_sd_boot_${board_name} PRIVATE
+  
+# )
+
+# target_sources(picocalc_sd_boot_${board_name} PRIVATE
+
+# )
+
 target_include_directories(picocalc_sd_boot_${board_name} PRIVATE
 ${CMAKE_CURRENT_LIST_DIR}/usb_msc
+${CMAKE_CURRENT_LIST_DIR}/managers
 )
 
 target_link_libraries(picocalc_sd_boot_${board_name} PUBLIC
@@ -58,6 +69,7 @@ target_link_libraries(picocalc_sd_boot_${board_name} PUBLIC
   blockdevice_sd
   filesystem_fat
   filesystem_vfs
+  filesystem_default
   pico_unique_id
   tinyusb_device
   tinyusb_board

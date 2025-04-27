@@ -34,10 +34,23 @@
 #include <dirent.h>
 #include "usb_msc/usb_msc.h"
 #include "filesystem/vfs.h"
+#include "managers/event_bus.h"
+#include "config.h"
+#include "sd_card.h"
+
 
 // External functions for SD card handling
-extern bool sd_card_inserted(void);
 extern bool fs_init(void);
+
+// // Check if SD card is inserted (using the detection pin)
+// static bool sd_card_inserted(void)
+// {
+//     // SD card detection pin is typically active low (0 when card inserted)
+//     return !gpio_get(SD_DET_PIN);
+// }
+
+// Define the type for the final selection callback
+typedef void (*final_selection_callback_t)(const char *selected_file);
 
 // UI Layout Constants
 #define UI_WIDTH 280
@@ -74,14 +87,13 @@ typedef struct
 #define SCROLL_DELAY_MS 300
 
 // Global variables for UI state
-static char current_path[512] = "/sd";                   // Current directory path
-static dir_entry_t entries[MAX_ENTRIES];                 // Directory entries
-static int entry_count = 0;                              // Number of entries in the current directory
-static int selected_index = 0;                           // Currently selected entry index
-static char status_message[256] = "";                    // Status message
-static uint32_t status_timestamp = 0;                    // Timestamp for status message
-static final_selection_callback_t final_callback = NULL; // Callback for file selection
-static bool exit_to_usb_msc = false;                     // Flag to exit UI loop for USB MSC mode
+static char current_path[512] = "/sd";                   
+static dir_entry_t entries[MAX_ENTRIES];                 
+static int entry_count = 0;                              
+static int selected_index = 0;                           
+static char status_message[256] = "";                    
+static uint32_t status_timestamp = 0;                    
+static final_selection_callback_t final_callback = NULL; 
 
 // Forward declarations
 static void ui_refresh(void);
@@ -110,8 +122,12 @@ static void draw_text(int x, int y, const char *text, int foreground, int backgr
 }
 
 /**
- * Format file size into human-readable string
- * Converts raw byte count to KB or MB with appropriate suffix
+ * @brief Format file size into human-readable string
+ * 
+ * @param size Raw size in bytes
+ * @param is_dir Whether the entry is a directory
+ * @param buf Output buffer for the formatted string
+ * @param buf_size Size of the output buffer
  */
 static void format_file_size(off_t size, int is_dir, char *buf, size_t buf_size)
 {
@@ -134,8 +150,14 @@ static void format_file_size(off_t size, int is_dir, char *buf, size_t buf_size)
 }
 
 /**
- * Create scrolling text for long filenames
+ * @brief Create scrolling text for long filenames
+ * 
  * Creates a continuous scroll effect for text that exceeds visible area
+ * 
+ * @param text Original text to scroll
+ * @param out Output buffer for the scrolled text
+ * @param out_size Size of the output buffer
+ * @param visible_chars Number of visible characters in the display area
  */
 static void get_scrolling_text(const char *text, char *out, size_t out_size, int visible_chars)
 {
@@ -154,7 +176,11 @@ static void get_scrolling_text(const char *text, char *out, size_t out_size, int
     out[i] = '\0';
 }
 
-// Load directory entries into the global entries array
+/**
+ * @brief Load directory entries into the global entries array
+ * 
+ * @param path Directory path to load
+ */
 static void load_directory(const char *path)
 {
     DIR *dir = opendir(path);
@@ -220,14 +246,18 @@ static void load_directory(const char *path)
     selected_index = 0;
 }
 
-// Draw the title header
+/**
+ * @brief Draw the title header
+ */
 static void ui_draw_title(void)
 {
     draw_rect_spi(UI_X, UI_Y, UI_X + UI_WIDTH - 1, UI_Y + HEADER_TITLE_HEIGHT, BLACK);
     draw_text(UI_X + 2, UI_Y + 2, "PicoCalc SD Firmware Loader", WHITE, BLACK);
 }
 
-// Draw the current path header
+/**
+ * @brief Draw the current path header
+ */
 static void ui_draw_path_header(void)
 {
     char path_header[300];
@@ -295,7 +325,8 @@ static void ui_draw_directory_entry(int entry_idx, int posY, int font_height, in
 }
 
 /**
- * Update only the selected entry row
+ * @brief Update only the selected entry row
+ * 
  * This is an optimization to avoid redrawing the entire directory list
  * when only the selected entry needs to be updated (e.g., for scrolling text)
  */
@@ -321,7 +352,9 @@ static void ui_update_selected_entry(void)
     }
 }
 
-// Draw the directory list
+/**
+ * @brief Draw the directory list
+ */
 static void ui_draw_directory_list(void)
 {
     const int font_height = 12;
@@ -344,7 +377,9 @@ static void ui_draw_directory_list(void)
     }
 }
 
-// Draw the status bar
+/**
+ * @brief Draw the status bar
+ */
 static void ui_draw_status_bar(void)
 {
     int y = UI_Y + UI_HEIGHT - STATUS_BAR_HEIGHT;
@@ -356,7 +391,9 @@ static void ui_draw_status_bar(void)
     draw_text(UI_X + 2, y + 2, truncated_message, COLOR_FG, COLOR_BG);
 }
 
-// Refresh the entire UI
+/**
+ * @brief Refresh the entire UI
+ */
 static void ui_refresh(void)
 {
     ui_draw_title();
@@ -371,7 +408,11 @@ static void ui_refresh(void)
     }
 }
 
-// Handle key events for navigation and selection
+/**
+ * @brief Handle key events for navigation and selection
+ * 
+ * @param key Key code from the keypad
+ */
 static void process_key_event(int key)
 {
     switch (key)
@@ -389,16 +430,10 @@ static void process_key_event(int key)
     case KEY_ENTER:
         if (entry_count > 0)
         {
-            // Check if the USB Mass Storage entry is selected (always the last entry)
             if (selected_index == entry_count - 1 && strcmp(entries[selected_index].name, "USB Mass Storage") == 0)
             {
-                // text_directory_ui_set_status("Entering USB MSC mode...");
-                // Unmount the filesystem using VFS
-                // fs_unmount("/sd");
-                // Initialize USB MSC
-                // usb_msc_init();
-                // Set flag to exit UI loop
-                exit_to_usb_msc = true;
+                text_directory_ui_set_status("Entering USB MSC mode...");
+                event_bus_post(EVENT_MSC_START);
                 return;
             }
             
@@ -438,13 +473,21 @@ static void process_key_event(int key)
     ui_draw_status_bar();
 }
 
-// Public API: Set the final selection callback
+/**
+ * @brief Set the final selection callback
+ * 
+ * @param callback Function to call when a file is selected
+ */
 void text_directory_ui_set_final_callback(final_selection_callback_t callback)
 {
     final_callback = callback;
 }
 
-// Public API: Initialize the UI
+/**
+ * @brief Initialize the UI
+ * 
+ * @return true if initialization was successful
+ */
 bool text_directory_ui_init(void)
 {
     draw_filled_rect(UI_X, UI_Y, UI_WIDTH, UI_HEIGHT, COLOR_BG);
@@ -454,7 +497,11 @@ bool text_directory_ui_init(void)
     return true;
 }
 
-// Public API: Set a status message
+/**
+ * @brief Set a status message
+ * 
+ * @param msg Message to display in the status bar
+ */
 void text_directory_ui_set_status(const char *msg)
 {
     strncpy(status_message, msg, sizeof(status_message) - 1);
@@ -463,8 +510,11 @@ void text_directory_ui_set_status(const char *msg)
     ui_draw_status_bar();
 }
 
-// Public API: Show an overlay popup indicating that USB Mass Storage mode is active
-// This function is called by tud_mount_cb() in usb_msc.c when a USB host connects
+/**
+ * @brief Show an overlay popup indicating that USB Mass Storage mode is active
+ * 
+ * This function is called when a USB host connects
+ */
 void text_directory_ui_show_msc_popup(void)
 {
     // Draw a semi-transparent overlay
@@ -475,34 +525,43 @@ void text_directory_ui_show_msc_popup(void)
     draw_text(UI_X + 30, UI_Y + 140, "Press ESC to exit", WHITE, BLACK);
 }
 
-// Public API: Hide the USB Mass Storage mode overlay popup
-// This function is called by tud_umount_cb() in usb_msc.c when a USB host disconnects
+/**
+ * @brief Hide the USB Mass Storage mode overlay popup
+ * 
+ * This function is called when a USB host disconnects
+ */
 void text_directory_ui_hide_msc_popup(void)
 {
     // Clear the overlay by refreshing the entire UI
     ui_refresh();
 }
 
-// Public API: Main event loop for the UI
+/**
+ * @brief Main event loop for the UI
+ * 
+ * Handles key events, updates scrolling text, and monitors SD card status
+ */
 void text_directory_ui_run(void)
 {
     uint32_t last_scroll_update = 0;
-    const uint32_t SCROLL_UPDATE_MS = 100; // Update scrolling text every 100ms
+    const uint32_t SCROLL_UPDATE_MS = 100;
+    bool running = true;
     
-    exit_to_usb_msc = false;
-    
-    while (!exit_to_usb_msc)
+    while (running)
     {
         int key = keypad_get_key();
-        if (key != 0)
+        if (key == KEY_ESC) {
+            event_bus_post(EVENT_ESC_PRESSED);
+            running = false;
+            continue;
+        } else if (key != 0) {
             process_key_event(key);
+        }
 
         uint32_t current_time = time_us_64() / 1000;
         
-        // Update scrolling text periodically
         if (current_time - last_scroll_update > SCROLL_UPDATE_MS)
         {
-            // Only update the selected entry row if there are entries and a selected item might need scrolling
             if (entry_count > 0 && selected_index >= 0 && 
                 strlen(entries[selected_index].name) + (entries[selected_index].is_dir ? 1 : 0) > FILE_NAME_VISIBLE_CHARS)
             {
@@ -511,23 +570,20 @@ void text_directory_ui_run(void)
             last_scroll_update = current_time;
         }
 
-        // Clear status message after timeout
         if (status_message[0] != '\0' && (current_time - status_timestamp) > 3000)
         {
             status_message[0] = '\0';
             ui_draw_status_bar();
         }
 
-        // Check for SD card removal during runtime
         if (!sd_card_inserted()) {
             text_directory_ui_set_status("SD card removed. Please reinsert card.");
+            event_bus_post(EVENT_CARD_REMOVED);
             
-            // Wait until the SD card is reinserted
             while (!sd_card_inserted()) {
                 sleep_ms(100);
             }
             
-            // Once reinserted, update the UI and reinitialize filesystem
             text_directory_ui_set_status("SD card detected. Remounting...");
             if (!fs_init()) {
                 text_directory_ui_set_status("Failed to remount SD card!");
@@ -535,19 +591,21 @@ void text_directory_ui_run(void)
                 watchdog_reboot(0, 0, 0);
             }
             
-            // Refresh the directory listing
             load_directory(current_path);
             ui_draw_path_header();
             ui_draw_directory_list();
             text_directory_ui_set_status("SD card remounted successfully.");
         }
 
-        sleep_ms(20); // Shorter sleep to make scrolling smoother
+        sleep_ms(20);
     }
 }
 
-// Public API: Pause the UI and enter USB MSC mode. This function will return when USB is disconnected
-// or when the device is reset.
+/**
+ * @brief Pause the UI and enter USB MSC mode
+ * 
+ * This function will return when USB is disconnected or when the device is reset
+ */
 void text_directory_ui_pause(void)
 {
     // Not implemented yet

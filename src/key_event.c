@@ -19,9 +19,10 @@
 #include "key_event.h"
 #include "debug.h"
 
-void keypad_init(void)
+int keypad_init(void)
 {
     init_i2c_kbd();
+    return 0;
 }
 
 int keypad_get_key(void)

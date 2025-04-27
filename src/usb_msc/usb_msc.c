@@ -8,7 +8,8 @@
 #include "tusb.h"
 #include "config.h"
 #include "blockdevice/sd.h"
-#include "text_directory_ui.h"
+#include "managers/ui_manager.h"
+#include "sd_card.h"
 #include <string.h>
 #include <hardware/gpio.h>
 
@@ -17,12 +18,7 @@ static blockdevice_t *msc_blockdev;      // SD card block device
 static uint32_t msc_block_count;
 static uint16_t msc_block_size;
 
-// Check if SD card is inserted (using the detection pin)
-static bool sd_card_inserted(void)
-{
-    // SD card detection pin is typically active low (0 when card inserted)
-    return !gpio_get(SD_DET_PIN);
-}
+
 
 // Buffers for sector I/O
 static uint8_t msc_read_buffer[512];
@@ -45,7 +41,7 @@ void usb_msc_init(void)
         125000000 / 2 / 4, true
     );
     if (!msc_blockdev) {
-        text_directory_ui_set_status("USB MSC init failed");
+        UIManager_setStatus("USB MSC init failed");
         return; // Failed to initialize block device
     }
 
@@ -62,13 +58,13 @@ void usb_msc_init(void)
 // Invoked when device is mounted by the host
 void tud_mount_cb(void)
 {
-    text_directory_ui_show_msc_popup();
+    UIManager_showMscPopup();
 }
 
 // Invoked when device is unmounted by the host
 void tud_umount_cb(void)
 {
-    text_directory_ui_hide_msc_popup();
+    UIManager_hideMscPopup();
 }
 
 

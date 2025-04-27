@@ -16,7 +16,7 @@ typedef enum {
     KEY_ESC = 0x1B,    /* Used to exit USB MSC mode */
 } lv_key_t;
 
-void keypad_init(void);
+int keypad_init(void);
 int keypad_get_key(void);
 
 #endif // KEY_EVENT_H
