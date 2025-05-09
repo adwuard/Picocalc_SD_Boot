@@ -27,6 +27,7 @@ Clone the source code and initialize the submodules.
 git clone https://github.com/adwuard/Picocalc_SD_Boot.git
 cd Picocalc_SD_Boot
 git submodule update --init --recursive
+cd src
 ```
 
 
